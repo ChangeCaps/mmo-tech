@@ -1,5 +1,8 @@
 use super::*;
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    reflect::{TypeUuid, Uuid},
+};
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
@@ -12,22 +15,26 @@ use std::{
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ConnectionId(pub u64);
 
+pub enum ConnectionEvent {
+    Connected(ConnectionId),
+}
+
 impl Default for ConnectionId {
     fn default() -> Self {
         Self(0)
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Hash)]
-pub struct ConnectionType(TypeId);
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ConnectionType(Uuid);
 
 impl ConnectionType {
-    pub fn is<T: Any>(&self) -> bool {
-        self.0 == TypeId::of::<T>()
+    pub fn is<T: TypeUuid>(&self) -> bool {
+        self.0 == T::TYPE_UUID
     }
 
-    pub fn from<T: Any>() -> Self {
-        Self(TypeId::of::<T>())
+    pub fn from<T: TypeUuid>() -> Self {
+        Self(T::TYPE_UUID)
     }
 }
 
@@ -41,6 +48,10 @@ impl Connection {
     pub fn send(&mut self, payload: &NetworkMessagePayload) -> Result<(), std::io::Error> {
         self.stream.write(&bincode::serialize(payload).unwrap())?;
         Ok(())
+    }
+
+    pub fn receive() {
+        
     }
 }
 
@@ -64,16 +75,36 @@ impl Connections {
     pub fn send(
         &mut self,
         payload: &NetworkMessagePayload,
-        target: &ConnectionId,
+        target: &NetworkTarget,
     ) -> Result<(), NetworkError> {
-        if let Some(connection) = self.connections.get_mut(target) {
-            connection.send(payload).map_err(|e| NetworkError::Io(e))
-        } else {
-            Err(NetworkError::MissingConnection)
+        match target {
+            NetworkTarget::Connection(target) => {
+                if let Some(connection) = self.connections.get_mut(target) {
+                    connection.send(payload).map_err(|e| NetworkError::Io(e))
+                } else {
+                    Err(NetworkError::MissingConnection)
+                }
+            }
+            NetworkTarget::ConnectionType(connection_type) => {
+                for connection in self.connections.values_mut() {
+                    if connection.ty == *connection_type {
+                        connection.send(payload).map_err(|e| NetworkError::Io(e))?;
+                    }
+                }
+
+                Ok(())
+            }
+            NetworkTarget::All => {
+                for connection in self.connections.values_mut() {
+                    connection.send(payload).map_err(|e| NetworkError::Io(e))?;
+                }
+
+                Ok(())
+            }
         }
     }
 
-    pub fn add_connection<T: Any>(&mut self, stream: TcpStream) {
+    pub fn add_connection<T: TypeUuid>(&mut self, stream: TcpStream) {
         let id = self.next_id;
         self.next_id.0 += 1;
         let addr = stream.peer_addr().unwrap();
@@ -143,7 +174,7 @@ pub fn client_connection_system(
             (
                 thread::spawn(move || {
                     let stream =
-                        TcpStream::connect_timeout(&addr, std::time::Duration::from_secs_f32(30.0));
+                        TcpStream::connect_timeout(&addr, std::time::Duration::from_secs_f32(10.0));
                     connected_thread.store(true, std::sync::atomic::Ordering::SeqCst);
                     stream
                 }),

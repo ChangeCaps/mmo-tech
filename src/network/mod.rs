@@ -1,9 +1,18 @@
-use bevy::prelude::*;
-use serde::{Deserialize, Serialize};
+use bevy::{
+    prelude::*,
+    reflect::{TypeUuid, Uuid},
+};
 use std::{
     any::{Any, TypeId},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
 };
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
+
+pub mod component;
+pub mod connection;
+
+use component::*;
+use connection::*;
 
 #[derive(Debug)]
 pub enum NetworkError {
@@ -11,16 +20,22 @@ pub enum NetworkError {
     MissingConnection,
 }
 
+pub enum NetworkTarget {
+    Connection(ConnectionId),
+    ConnectionType(ConnectionType),
+    All,
+}
+
+#[derive(TypeUuid)]
+#[uuid = "2524ed5a-3395-41f3-b65b-5a2a09fc411f"]
 pub struct Server;
+#[derive(TypeUuid)]
+#[uuid = "e44759f0-de6b-4d14-806d-b1485afbd6eb"]
 pub struct Client;
-
-pub mod connection;
-
-use connection::*;
 
 #[derive(Serialize, Deserialize)]
 pub enum NetworkMessagePayload {
-    SyncComponent { type_id: TypeId },
+    SyncComponent { type_id: Uuid, data: Vec<u8> },
 }
 
 pub struct NetworkMessage {
@@ -35,7 +50,25 @@ pub struct NetworkResource {
 
 #[derive(Default)]
 pub struct NetworkHandle {
-    messages: Vec<(ConnectionId, NetworkMessagePayload)>,
+    messages: Vec<(NetworkTarget, NetworkMessagePayload)>,
+}
+
+impl NetworkHandle {
+    pub fn update_component<T: TypeUuid + Serialize + DeserializeOwned>(&mut self, component: &T) {
+        self.messages.push((
+            NetworkTarget::All,
+            NetworkMessagePayload::SyncComponent {
+                type_id: T::TYPE_UUID,
+                data: bincode::serialize(component).unwrap(),
+            },
+        ));
+    }
+}
+
+pub fn netowrk_receiving_system(
+    mut connections: ResMut<Connections>,
+) {
+    
 }
 
 pub fn network_sending_system(
@@ -60,6 +93,26 @@ impl NetworkPlugin {
         Self(ConnectionMethod::Connect(
             addr.to_socket_addrs().unwrap().collect(),
         ))
+    }
+}
+
+pub trait AppBuilderExt {
+    fn app_builder(&mut self) -> &mut AppBuilder;
+
+    fn register_component_sync<
+        T: TypeUuid + Serialize + DeserializeOwned + Send + Sync + Clone + 'static,
+    >(
+        &mut self,
+    ) -> &mut Self {
+        self.app_builder()
+            .add_system(network_component_sync_system::<T>);
+        self
+    }
+}
+
+impl AppBuilderExt for AppBuilder {
+    fn app_builder(&mut self) -> &mut AppBuilder {
+        self
     }
 }
 
