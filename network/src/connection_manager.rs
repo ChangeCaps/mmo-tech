@@ -123,6 +123,7 @@ impl ConnectionInner {
                 let mut buf = vec![0u8; len];
 
                 if stream.peek(&mut buf)? < len {
+                    *next_len = Some(len);
                     return Err(crate::Error::Io(std::io::Error::new(std::io::ErrorKind::WouldBlock, "would block")));
                 }
 
