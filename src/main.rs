@@ -63,12 +63,12 @@ impl Server {
 
 #[derive(Clap)]
 struct Client {
-    ip: std::net::SocketAddr,
+    ip: String,
 }
 
 impl Client {
     pub fn run(&self) {
-        let stream = TcpStream::connect(self.ip).unwrap();
+        let stream = TcpStream::connect(self.ip.clone()).unwrap();
 
         bevy::prelude::App::build()
             // resources
