@@ -1,22 +1,16 @@
 [package]
-name = "mmo-tech"
+name = "network"
 version = "0.1.0"
-authors = ["Hjalte Nannestad <hjalte.nannestad@gmail.com>"]
+authors = ["= <hjalte.nannestad@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 bevy = { "git" = "https://github.com/bevyengine/bevy" }
+log = "0.4"
+simple_logger = "1.11"
 clap = "3.0.0-beta.2"
 serde = { version = "1", features = ["derive"] }
 serde_cbor = "0.11"
 typetag = "0.1"
-network = { path = "network" }
-winit = "0.23.0"
-
-[workspace]
-
-members = [
-    "network"
-]
